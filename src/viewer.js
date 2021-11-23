@@ -19,6 +19,7 @@ import {
   Vector3,
   WebGLRenderer,
   sRGBEncoding,
+  Mesh
 } from 'three';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -323,8 +324,15 @@ export class Viewer {
         this.state.addLights = false;
       } else if (node.isMesh) {
         // TODO(https://github.com/mrdoob/three.js/pull/18235): Clean up.
-        node.material.depthWrite = !node.material.transparent;
+        // node.material.depthWrite = !node.material.transparent;
       }
+    });
+
+    traverseMaterials(this.content, (material) => {
+      if(material.transparent) {
+        material.alphaTest = 0.99;
+      }
+      material.depthWrite = true;
     });
 
     this.setClips(clips);
@@ -337,7 +345,7 @@ export class Viewer {
 
     window.content = this.content;
     console.info('[glTF Viewer] THREE.Scene exported as `window.content`.');
-    this.printGraph(this.content);
+    // this.printGraph(this.content);
 
   }
 
