@@ -145,9 +145,17 @@ export class Viewer {
     this.gridHelper = null;
     this.axesHelper = null;
 
+    // more helpers
+    this.guiAdded = false;
+
+    // if not in kiosk mode, only then show the axeshelpers and gui
+    if(!options.kiosk) {
+      this.addGUI();
+      this.guiAdded = true;
+    }
+
     this.addAxesHelper();
-    this.addGUI();
-    if (options.kiosk) this.gui.close();
+    // if (options.kiosk) this.gui.close();
 
     this.animate = this.animate.bind(this);
     requestAnimationFrame( this.animate );
@@ -628,6 +636,9 @@ export class Viewer {
   }
 
   updateGUI () {
+    if(!this.guiAdded) {
+      return;
+    }
     this.cameraFolder.domElement.style.display = 'none';
 
     this.morphCtrls.forEach((ctrl) => ctrl.remove());

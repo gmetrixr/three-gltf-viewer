@@ -6,3 +6,8 @@ dist
 .cache
 
 .vercel
+# IDE Specific
+.vscode/
+.idea/
+dist/
+.cache/

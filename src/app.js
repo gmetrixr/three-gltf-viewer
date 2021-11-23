@@ -36,14 +36,17 @@ class App {
     this.inputEl = el.querySelector('#file-input');
     this.validationCtrl = new ValidationController(el);
 
-    this.createDropzone();
     this.hideSpinner();
 
     const options = this.options;
+    if(!options.model) {
+      // add the dropzone only if there isn't a model present in the url.
+      this.createDropzone();
+    }
 
-    if (options.kiosk) {
+    if (!options.kiosk) {
       const headerEl = document.querySelector('header');
-      headerEl.style.display = 'none';
+      headerEl.style.display = 'flex';
     }
 
     if (options.model) {
@@ -59,6 +62,8 @@ class App {
     dropCtrl.on('drop', ({files}) => this.load(files));
     dropCtrl.on('dropstart', () => this.showSpinner());
     dropCtrl.on('droperror', () => this.hideSpinner());
+    this.dropEl.querySelector('.upload-btn').style.display = 'flex';
+    this.dropEl.querySelector('.placeholder').style.display = 'flex';
   }
 
   /**
@@ -139,7 +144,7 @@ class App {
     } else if (error && error.target && error.target instanceof Image) {
       message = 'Missing texture: ' + error.target.src.split('/').pop();
     }
-    window.alert(message);
+    // window.alert(message);
     console.error(error);
   }
 
