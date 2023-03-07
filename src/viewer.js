@@ -4,6 +4,7 @@ import {
   AxesHelper,
   Box3,
   Cache,
+  Color,
   DirectionalLight,
   GridHelper,
   HemisphereLight,
@@ -15,11 +16,11 @@ import {
   REVISION,
   Scene,
   SkeletonHelper,
-  UnsignedByteType,
   Vector3,
   WebGLRenderer,
   sRGBEncoding,
-  Mesh
+  LinearToneMapping,
+  ACESFilmicToneMapping
 } from 'three';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -27,34 +28,21 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 import { GUI } from 'dat.gui';
 
-import { environments } from '../assets/environment/index.js';
-import { createBackground } from '../lib/three-vignette.js';
+import { environments } from './environments.js';
 
 const DEFAULT_CAMERA = '[default]';
 
 const MANAGER = new LoadingManager();
 const THREE_PATH = `https://unpkg.com/three@0.${REVISION}.x`
-const DRACO_LOADER = new DRACOLoader( MANAGER ).setDecoderPath( `${THREE_PATH}/examples/js/libs/draco/gltf/` );
-const KTX2_LOADER = new KTX2Loader( MANAGER ).setTranscoderPath( `${THREE_PATH}/examples/js/libs/basis/` );
+const DRACO_LOADER = new DRACOLoader( MANAGER ).setDecoderPath( `${THREE_PATH}/examples/jsm/libs/draco/gltf/` );
+const KTX2_LOADER = new KTX2Loader( MANAGER ).setTranscoderPath( `${THREE_PATH}/examples/jsm/libs/basis/` );
 
 const IS_IOS = isIOS();
-
-// glTF texture types. `envMap` is deliberately omitted, as it's used internally
-// by the loader but not part of the glTF format.
-const MAP_NAMES = [
-  'map',
-  'aoMap',
-  'emissiveMap',
-  'glossinessMap',
-  'metalnessMap',
-  'normalMap',
-  'roughnessMap',
-  'specularMap',
-];
 
 const Preset = {ASSET_GENERATOR: 'assetgenerator'};
 
@@ -72,6 +60,10 @@ export class Viewer {
     this.clips = [];
     this.gui = null;
 
+    if (options.preset) {
+      Tinybird.trackEvent('preset', {preset: options.preset});
+    }
+
     this.state = {
       environment: options.preset === Preset.ASSET_GENERATOR
         ? environments.find((e) => e.id === 'footprint-court').name
@@ -85,15 +77,15 @@ export class Viewer {
       grid: false,
 
       // Lights
-      addLights: true,
-      exposure: 1.0,
+      punctualLights: true,
+      exposure: 0.0,
+      toneMapping: LinearToneMapping,
       textureEncoding: 'sRGB',
       ambientIntensity: 0.3,
       ambientColor: 0xFFFFFF,
       directIntensity: 0.8 * Math.PI, // TODO(#116)
       directColor: 0xFFFFFF,
-      bgColor1: '#ffffff',
-      bgColor2: '#353535'
+      bgColor: 0x191919,
     };
 
     this.prevTime = 0;
@@ -102,7 +94,10 @@ export class Viewer {
     this.stats.dom.height = '48px';
     [].forEach.call(this.stats.dom.children, (child) => (child.style.display = ''));
 
+    this.backgroundColor = new Color(this.state.bgColor);
+
     this.scene = new Scene();
+    this.scene.background = this.backgroundColor;
 
     const fov = options.preset === Preset.ASSET_GENERATOR
       ? 0.8 * 180 / Math.PI
@@ -112,6 +107,7 @@ export class Viewer {
     this.scene.add( this.defaultCamera );
 
     this.renderer = window.renderer = new WebGLRenderer({antialias: true});
+    // this.renderer.useLegacyLights = true;
     this.renderer.physicallyCorrectLights = true;
     this.renderer.outputEncoding = sRGBEncoding;
     this.renderer.setClearColor( 0xcccccc );
@@ -121,18 +117,12 @@ export class Viewer {
     this.pmremGenerator = new PMREMGenerator( this.renderer );
     this.pmremGenerator.compileEquirectangularShader();
 
+    this.neutralEnvironment = this.pmremGenerator.fromScene( new RoomEnvironment() ).texture;
+
     this.controls = new OrbitControls( this.defaultCamera, this.renderer.domElement );
     this.controls.autoRotate = false;
     this.controls.autoRotateSpeed = -10;
     this.controls.screenSpacePanning = true;
-
-    this.vignette = createBackground({
-      aspect: this.defaultCamera.aspect,
-      grainScale: IS_IOS ? 0 : 0.001, // mattdesl/three-vignette-background#1
-      colors: [this.state.bgColor1, this.state.bgColor2]
-    });
-    this.vignette.name = 'Vignette';
-    this.vignette.renderOrder = -1;
 
     this.el.appendChild(this.renderer.domElement);
 
@@ -194,7 +184,6 @@ export class Viewer {
 
     this.defaultCamera.aspect = clientWidth / clientHeight;
     this.defaultCamera.updateProjectionMatrix();
-    this.vignette.style({aspect: this.defaultCamera.aspect});
     this.renderer.setSize(clientWidth, clientHeight);
 
     this.axesCamera.aspect = this.axesDiv.clientWidth / this.axesDiv.clientHeight;
@@ -239,6 +228,8 @@ export class Viewer {
       const blobURLs = [];
 
       loader.load(url, (gltf) => {
+
+        window.VIEWER.json = gltf;
 
         const scene = gltf.scene || gltf.scenes[0];
         const clips = gltf.animations || [];
@@ -317,11 +308,11 @@ export class Viewer {
     this.scene.add(object);
     this.content = object;
 
-    this.state.addLights = true;
+    this.state.punctualLights = true;
 
     this.content.traverse((node) => {
       if (node.isLight) {
-        this.state.addLights = false;
+        this.state.punctualLights = false;
       } else if (node.isMesh) {
         // TODO(https://github.com/mrdoob/three.js/pull/18235): Clean up.
         // node.material.depthWrite = !node.material.transparent;
@@ -343,8 +334,8 @@ export class Viewer {
     this.updateTextureEncoding();
     this.updateDisplay();
 
-    window.content = this.content;
-    console.info('[glTF Viewer] THREE.Scene exported as `window.content`.');
+    window.VIEWER.scene = this.content;
+
     // this.printGraph(this.content);
 
   }
@@ -412,13 +403,14 @@ export class Viewer {
     const state = this.state;
     const lights = this.lights;
 
-    if (state.addLights && !lights.length) {
+    if (state.punctualLights && !lights.length) {
       this.addLights();
-    } else if (!state.addLights && lights.length) {
+    } else if (!state.punctualLights && lights.length) {
       this.removeLights();
     }
 
-    this.renderer.toneMappingExposure = state.exposure;
+    this.renderer.toneMapping = Number(state.toneMapping);
+    this.renderer.toneMappingExposure = Math.pow(2, state.exposure);
 
     if (lights.length === 2) {
       lights[0].intensity = state.ambientIntensity;
@@ -464,29 +456,33 @@ export class Viewer {
 
     this.getCubeMapTexture( environment ).then(( { envMap } ) => {
 
-      if ((!envMap || !this.state.background) && this.activeCamera === this.defaultCamera) {
-        this.scene.add(this.vignette);
-      } else {
-        this.scene.remove(this.vignette);
-      }
-
       this.scene.environment = envMap;
-      this.scene.background = this.state.background ? envMap : null;
+      this.scene.background = this.state.background ? envMap : this.backgroundColor;
 
     });
 
   }
 
   getCubeMapTexture ( environment ) {
-    const { path } = environment;
+    const { id, path } = environment;
 
-    // no envmap
-    if ( ! path ) return Promise.resolve( { envMap: null } );
+    // neutral (THREE.RoomEnvironment)
+    if ( id === 'neutral' ) {
+
+      return Promise.resolve( { envMap: this.neutralEnvironment } );
+
+    }
+
+    // none
+    if ( id === '' ) {
+
+      return Promise.resolve( { envMap: null } );
+
+    }
 
     return new Promise( ( resolve, reject ) => {
 
-      new RGBELoader()
-        .setDataType( UnsignedByteType )
+      new EXRLoader()
         .load( path, ( texture ) => {
 
           const envMap = this.pmremGenerator.fromEquirectangular( texture ).texture;
@@ -537,7 +533,9 @@ export class Viewer {
   }
 
   updateBackground () {
-    this.vignette.style({colors: [this.state.bgColor1, this.state.bgColor2]});
+
+    this.backgroundColor.setHex(this.state.bgColor);
+
   }
 
   /**
@@ -583,10 +581,8 @@ export class Viewer {
     gridCtrl.onChange(() => this.updateDisplay());
     dispFolder.add(this.controls, 'autoRotate');
     dispFolder.add(this.controls, 'screenSpacePanning');
-    const bgColor1Ctrl = dispFolder.addColor(this.state, 'bgColor1');
-    const bgColor2Ctrl = dispFolder.addColor(this.state, 'bgColor2');
-    bgColor1Ctrl.onChange(() => this.updateBackground());
-    bgColor2Ctrl.onChange(() => this.updateBackground());
+    const bgColorCtrl = dispFolder.addColor(this.state, 'bgColor');
+    bgColorCtrl.onChange(() => this.updateBackground());
 
     // Lighting controls.
     const lightFolder = gui.addFolder('Lighting');
@@ -602,8 +598,9 @@ export class Viewer {
     const envMapCtrl = lightFolder.add(this.state, 'environment', environments.map((env) => env.name));
     envMapCtrl.onChange(() => this.updateEnvironment());
     [
-      lightFolder.add(this.state, 'exposure', 0, 2),
-      lightFolder.add(this.state, 'addLights').listen(),
+      lightFolder.add(this.state, 'toneMapping', {Linear: LinearToneMapping, 'ACES Filmic': ACESFilmicToneMapping}),
+      lightFolder.add(this.state, 'exposure', -10, 10, 0.01),
+      lightFolder.add(this.state, 'punctualLights').listen(),
       lightFolder.add(this.state, 'ambientIntensity', 0, 2),
       lightFolder.addColor(this.state, 'ambientColor'),
       lightFolder.add(this.state, 'directIntensity', 0, 4), // TODO(#116)
@@ -740,11 +737,15 @@ export class Viewer {
     // dispose textures
     traverseMaterials( this.content, (material) => {
 
-      MAP_NAMES.forEach( (map) => {
+      for ( const key in material ) {
 
-        if (material[ map ]) material[ map ].dispose();
+        if ( key !== 'envMap' && material[ key ] && material[ key ].isTexture ) {
 
-      } );
+          material[ key ].dispose();
+
+        }
+
+      }
 
     } );
 

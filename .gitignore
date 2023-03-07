@@ -1,6 +1,4 @@
-.DS_Store
 node_modules
-npm-debug.log*
 public
 dist
 .cache
@@ -11,3 +9,5 @@ dist
 .idea/
 dist/
 .cache/
+.DS_Store
+npm-debug.log*

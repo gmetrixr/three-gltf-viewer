@@ -1,12 +1,14 @@
-import { WEBGL } from 'three/examples/jsm/WebGL.js';
+import WebGL from 'three/examples/jsm/capabilities/WebGL.js';
 import { Viewer } from './viewer.js';
 import { SimpleDropzone } from 'simple-dropzone';
-import { ValidationController } from './validation-controller.js';
+import { Validator } from './validator.js';
 import queryString from 'query-string';
+
+window.VIEWER = {};
 
 if (!(window.File && window.FileReader && window.FileList && window.Blob)) {
   console.error('The File APIs are not fully supported in this browser.');
-} else if (!WEBGL.isWebGLAvailable()) {
+} else if (!WebGL.isWebGLAvailable()) {
   console.error('WebGL is not supported in this browser.');
 }
 
@@ -34,7 +36,7 @@ class App {
     this.spinnerEl = el.querySelector('.spinner');
     this.dropEl = el.querySelector('.dropzone');
     this.inputEl = el.querySelector('#file-input');
-    this.validationCtrl = new ValidationController(el);
+    this.validator = new Validator(el);
 
     this.hideSpinner();
 
@@ -126,7 +128,7 @@ class App {
       .catch((e) => this.onError(e))
       .then((gltf) => {
         if (!this.options.kiosk) {
-          this.validationCtrl.validate(fileURL, rootPath, fileMap, gltf);
+          this.validator.validate(fileURL, rootPath, fileMap, gltf);
         }
         cleanup();
       });
@@ -161,4 +163,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const app = new App(document.body, location);
 
+  window.VIEWER.app = app;
+
+  console.info('[glTF Viewer] Debugging data exported as `window.VIEWER`.');
+
 });
+
+function isIFrame () {
+    try {
+        return window.self !== window.top;
+    } catch (e) {
+        return true;
+    }
+}
+
+// bandwidth on this page is very high. hoping to
+// figure out what percentage of that is embeds.
+Tinybird.trackEvent('load', {embed: isIFrame()});
