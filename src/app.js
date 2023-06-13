@@ -2,6 +2,7 @@ import WebGL from 'three/examples/jsm/capabilities/WebGL.js';
 import { Viewer } from './viewer.js';
 import { SimpleDropzone } from 'simple-dropzone';
 import { Validator } from './validator.js';
+import { Footer } from './components/footer';
 import queryString from 'query-string';
 
 window.VIEWER = {};
@@ -159,6 +160,8 @@ class App {
   }
 }
 
+document.body.innerHTML += Footer();
+
 document.addEventListener('DOMContentLoaded', () => {
 
   const app = new App(document.body, location);
@@ -168,15 +171,3 @@ document.addEventListener('DOMContentLoaded', () => {
   console.info('[glTF Viewer] Debugging data exported as `window.VIEWER`.');
 
 });
-
-function isIFrame () {
-    try {
-        return window.self !== window.top;
-    } catch (e) {
-        return true;
-    }
-}
-
-// bandwidth on this page is very high. hoping to
-// figure out what percentage of that is embeds.
-Tinybird.trackEvent('load', {embed: isIFrame()});

@@ -8,7 +8,6 @@ import {
   DirectionalLight,
   GridHelper,
   HemisphereLight,
-  LinearEncoding,
   LoaderUtils,
   LoadingManager,
   PMREMGenerator,
@@ -60,10 +59,6 @@ export class Viewer {
     this.clips = [];
     this.gui = null;
 
-    if (options.preset) {
-      Tinybird.trackEvent('preset', {preset: options.preset});
-    }
-
     this.state = {
       environment: options.preset === Preset.ASSET_GENERATOR
         ? environments.find((e) => e.id === 'footprint-court').name
@@ -80,7 +75,6 @@ export class Viewer {
       punctualLights: true,
       exposure: 0.0,
       toneMapping: LinearToneMapping,
-      textureEncoding: 'sRGB',
       ambientIntensity: 0.3,
       ambientColor: 0xFFFFFF,
       directIntensity: 0.8 * Math.PI, // TODO(#116)
@@ -120,8 +114,6 @@ export class Viewer {
     this.neutralEnvironment = this.pmremGenerator.fromScene( new RoomEnvironment() ).texture;
 
     this.controls = new OrbitControls( this.defaultCamera, this.renderer.domElement );
-    this.controls.autoRotate = false;
-    this.controls.autoRotateSpeed = -10;
     this.controls.screenSpacePanning = true;
 
     this.el.appendChild(this.renderer.domElement);
@@ -265,6 +257,8 @@ export class Viewer {
 
     this.clear();
 
+    object.updateMatrixWorld(); // donmccurdy/three-gltf-viewer#330
+
     const box = new Box3().setFromObject(object);
     const size = box.getSize(new Vector3()).length();
     const center = box.getCenter(new Vector3());
@@ -331,7 +325,6 @@ export class Viewer {
     this.updateLights();
     this.updateGUI();
     this.updateEnvironment();
-    this.updateTextureEncoding();
     this.updateDisplay();
 
     window.VIEWER.scene = this.content;
@@ -386,17 +379,6 @@ export class Viewer {
         }
       });
     }
-  }
-
-  updateTextureEncoding () {
-    const encoding = this.state.textureEncoding === 'sRGB'
-      ? sRGBEncoding
-      : LinearEncoding;
-    traverseMaterials(this.content, (material) => {
-      if (material.map) material.map.encoding = encoding;
-      if (material.emissiveMap) material.emissiveMap.encoding = encoding;
-      if (material.map || material.emissiveMap) material.needsUpdate = true;
-    });
   }
 
   updateLights () {
@@ -579,22 +561,12 @@ export class Viewer {
     skeletonCtrl.onChange(() => this.updateDisplay());
     const gridCtrl = dispFolder.add(this.state, 'grid');
     gridCtrl.onChange(() => this.updateDisplay());
-    dispFolder.add(this.controls, 'autoRotate');
     dispFolder.add(this.controls, 'screenSpacePanning');
     const bgColorCtrl = dispFolder.addColor(this.state, 'bgColor');
     bgColorCtrl.onChange(() => this.updateBackground());
 
     // Lighting controls.
     const lightFolder = gui.addFolder('Lighting');
-    const encodingCtrl = lightFolder.add(this.state, 'textureEncoding', ['sRGB', 'Linear']);
-    encodingCtrl.onChange(() => this.updateTextureEncoding());
-    lightFolder.add(this.renderer, 'outputEncoding', {sRGB: sRGBEncoding, Linear: LinearEncoding})
-      .onChange(() => {
-        this.renderer.outputEncoding = Number(this.renderer.outputEncoding);
-        traverseMaterials(this.content, (material) => {
-          material.needsUpdate = true;
-        });
-      });
     const envMapCtrl = lightFolder.add(this.state, 'environment', environments.map((env) => env.name));
     envMapCtrl.onChange(() => this.updateEnvironment());
     [
